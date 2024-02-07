@@ -1,0 +1,2 @@
+[console_scripts]
+crudehelpsys = crudehelpsys_package.chs:main

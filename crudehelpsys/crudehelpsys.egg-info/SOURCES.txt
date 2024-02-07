@@ -1,0 +1,6 @@
+setup.py
+crudehelpsys.egg-info/PKG-INFO
+crudehelpsys.egg-info/SOURCES.txt
+crudehelpsys.egg-info/dependency_links.txt
+crudehelpsys.egg-info/entry_points.txt
+crudehelpsys.egg-info/top_level.txt

@@ -1,0 +1,2 @@
+global-exclude direct_url.json
+global-include ReadMe.md
