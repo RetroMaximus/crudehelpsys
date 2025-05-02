@@ -1,12 +1,14 @@
 import os
 import sys
-import json
+#import json
 import ast
-from pathlib import *
+from pathlib import Path
 import subprocess
-import importlib
+#import importlib
 from importlib import util
 import inspect
+from typing import Dict, List, Any, Optional
+import asyncio
 
 externalcmdclass = None
 classcontainer = None
@@ -54,9 +56,9 @@ class prj_details:
                   "the script,eliminating the need for constant modification. Ease of use is\n"
                   "highlighted by its interactive console input listener, This enables users to effortlessly navigate\n"
                   "and execute commands for simplicity and efficiency. cRUDE Help Sys simplifies command-line application\n"
-                  "development, offering a hassle-free experience for developers and users alike.\n\n"
+                  "development, offering a hassle-free experience for developers and users alike.\n\n")
 
-                  "Welcome to a world where command-line operations become a breeze - welcome to cRUDE Help Sys!\n\n")
+    welcomemsg = ("Welcome to a world where command-line operations become a breeze - welcome to cRUDE Help Sys!\n\n")
 
 class hrclass:
     classcontainer = None
@@ -67,7 +69,7 @@ class hrclass:
         cls.externalcmdclass = None  # Make it an instance attribute
         cls.externalclasspath = ""
 
-    def launchcmd(cmd_arg, frommainscript, fullscriptpath):
+    async def launchcmd(self, cmd_arg, frommainscript, fullscriptpath):
         # Extract the arguments passed to the command
         launchedargs = cmd_arg[2:]
         lcmd, totalargs = cmd_arg[1], len(cmd_arg) - 2
@@ -85,38 +87,39 @@ class hrclass:
             # Filter out None values from cmd_arg
             non_none_args = [arg for arg in cmd_arg[2:2 + arg_count] if arg is not None]
             arg_list = non_none_args + [None] * (arg_count - len(non_none_args))
-            arg_request_result = hrclass.argrequest(lcmd, first_arg)
+            arg_request_result = hrclass.argrequest(self, lcmd, first_arg)
 
             # Perform argument checks using hrclass.verify
-            if hrclass.verify(arg_request_result, arg_list, lcmd, frommainscript):
+            if hrclass.verify(self, arg_request_result, arg_list, lcmd, frommainscript):
                 return True
 
         # Dynamically get the method from cmd_init_instance
         cmd_method = getattr(cmd_init_instance, lcmd, None)
 
-        # Check if the method is callable and has the __call__ attribute
         if callable(cmd_method) and hasattr(cmd_method, '__call__'):
-            # Check if the total number of arguments matches the expected number
-            if totalargs == len(inspect.signature(cmd_method).parameters) and common_checks(totalargs):
-                cmd_method(*launchedargs)
+            # Check if the method is a coroutine
+            if asyncio.iscoroutinefunction(cmd_method):
+                if totalargs == len(inspect.signature(cmd_method).parameters) and common_checks(totalargs):
+                    await cmd_method(*launchedargs)  # Added await
+                else:
+                    print(hrcolors.console_color_yellow + "\nInvalid Command" + hrcolors.console_color_reset + " - "
+                    "Use" + hrcolors.console_color_purple+ f" '{first_arg} help' " + hrcolors.console_color_reset + ""
+                    " in command line without quotes for more information.", hrcolors.console_color_textblink,
+                          hrcolors.console_color_green +"\n\nReady!\n"+ hrcolors.console_color_reset)
+                    exit()
             else:
-                print(hrcolors.console_color_yellow + "\nInvalid Command" + hrcolors.console_color_reset + " - "
-                "Use" + hrcolors.console_color_purple+ f" '{first_arg} help' " + hrcolors.console_color_reset + ""
-                " in command line without quotes for more information.", hrcolors.console_color_textblink,
-                      hrcolors.console_color_green +"\n\nReady!\n"+ hrcolors.console_color_reset)
-                exit()
-        else:
-            print(hrcolors.console_color_yellow + "\nInvalid Command" + hrcolors.console_color_reset + " - "
-                    "Use" + hrcolors.console_color_purple + f" '{first_arg} help' "
-                    f"" + hrcolors.console_color_reset + " in command line without quotes for"
-                    "more information.", hrcolors.console_color_textblink,
-                      hrcolors.console_color_green +"\n\nReady!\n" + hrcolors.console_color_reset)
+                # Regular function case
+                if totalargs == len(inspect.signature(cmd_method).parameters) and common_checks(totalargs):
+                    cmd_method(*launchedargs)
+                else:
+                    print(hrcolors.console_color_yellow + "\nInvalid Command" + hrcolors.console_color_reset + " - "
+                    "Use" + hrcolors.console_color_purple+ f" '{first_arg} help' " + hrcolors.console_color_reset + ""
+                    " in command line without quotes for more information.", hrcolors.console_color_textblink,
+                          hrcolors.console_color_green +"\n\nReady!\n"+ hrcolors.console_color_reset)
+                    exit()
 
-
-        # Exit the script after command execution
-        exit()
-
-    def checkcmdcache(cmd, args, first_arg, classcontainer):
+    async def checkcmdcache(self, cmd, args, first_arg, classcontainer):
+        _ = classcontainer
         # Get the total number of command-line arguments
         n = len(sys.argv)
 
@@ -127,7 +130,7 @@ class hrclass:
                 exit()
 
             case "no_cmds":
-                print(f"\n'{prj_details.welcommsg}")
+                print(f"\n'{prj_details.welcomemsg}")
 
             case "help":
                 # Display help information
@@ -138,7 +141,7 @@ class hrclass:
                 # Check if a specific help term is provided
                 if len(args) == 3:
                     external_script_path = os.path.abspath(sys.argv[0])
-                    hrclass.helprequest(args[2], first_arg, external_script_path)
+                    hrclass.helprequest(self, args[2], first_arg, external_script_path)
                 else:
                     print(hrcolors.console_color_yellow + "\nInvalid Help Request" + hrcolors.console_color_reset + " - Use a one-word search term.\n")
                 # Exit the script
@@ -153,42 +156,67 @@ class hrclass:
                 external_script_path = os.path.abspath(sys.argv[0])
 
                 # Launch the command using hrclass.launchcmd
-                hrclass.launchcmd(cmd_args, first_arg, external_script_path)
+                await hrclass.launchcmd(self, cmd_args, first_arg, external_script_path)
 
                 # Exit the script
-                exit()
+                #exit()
 
-    def argrequest(helpreq, homescript):
-        # Check if jsonhelp is available and not empty
-        if len(hrclass.jsonhelp) > 0:
-            try:
+    def argrequest(self, helpreq, homescript):
+        _ = homescript
+        try:
+            # Check if jsonhelp is available and not empty
+            temparchdata: Optional[List[Dict[str, Any]]] = hrclass.jsonhelp
+            archivedata: Dict[str, Any] = {}
+            if temparchdata and isinstance(temparchdata, list) and len(temparchdata) > 0:
+                archivedata = temparchdata[0]
+
+            help_storage: List[Dict[str, Any]] = archivedata.get("helpdatastorage", [])
+            for cmd_data in help_storage:
+                if cmd_data.get('name') == helpreq:
+                    required_args = cmd_data.get("requiredargs", "")
+                    return tuple(required_args.split(", ")) if required_args else ()
+        
+            print(hrcolors.console_color_yellow + "\nNo help for this term: " + hrcolors.console_color_red + helpreq + hrcolors.console_color_reset) 
+        
+        except Exception as e:
+            # Handle exceptions and print error information
+            print(hrcolors.console_color_yellow + f"An error occurred:" + hrcolors.console_color_reset + hrcolors.console_color_purple + f"{e}" + hrcolors.console_color_reset)
+            import traceback
+            traceback.print_exc()
+
+        #if len(hrclass.jsonhelp) > 0:
+        #    try:
+                
+                
+
+
                 # Check if jsonhelp is an instance attribute
-                if hasattr(hrclass, 'jsonhelp'):
-                    for cmd_data in hrclass.jsonhelp[0]["helpdatastorage"]:
-                        if cmd_data["name"] == helpreq:
-                            required_args = cmd_data.get("requiredargs", "")
-                            return tuple(required_args.split(", ")) if required_args else ()
+        #        if hasattr(hrclass, 'jsonhelp'):
+        #            for cmd_data in hrclass.jsonhelp[0]["helpdatastorage"]:
+        #                if cmd_data["name"] == helpreq:
+        #                    required_args = cmd_data.get("requiredargs", "")
+        #                    return tuple(required_args.split(", ")) if required_args else ()
 
                 # If jsonhelp is a class attribute, access it directly
-                elif 'jsonhelp' in hrclass.__dict__:
-                    for cmd_data in hrclass.jsonhelp[0]["helpdatastorage"]:
-                        if cmd_data["name"] == helpreq:
-                            required_args = cmd_data.get("requiredargs", "")
-                            return tuple(required_args.split(", ")) if required_args else ()
+        #        elif 'jsonhelp' in hrclass.__dict__:
+        #            for cmd_data in hrclass.jsonhelp[0]["helpdatastorage"]:
+        #                if cmd_data["name"] == helpreq:
+        #                    required_args = cmd_data.get("requiredargs", "")
+        #                    return tuple(required_args.split(", ")) if required_args else ()
 
                 # Print message if no help is found for the term
-                print(hrcolors.console_color_yellow + "\nNo help for this term: " + hrcolors.console_color_red + helpreq + hrcolors.console_color_reset)
-                return ()
-                # Existing code if any more custom checks needed can be added here...
+        #        print(hrcolors.console_color_yellow + "\nNo help for this term: " + hrcolors.console_color_red + helpreq + hrcolors.console_color_reset)
+        #        return ()
+        #        # Existing code if any more custom checks needed can be added here...
 
-            except Exception as e:
+         #   except Exception as e:
                 # Handle exceptions and print error information
-                print(hrcolors.console_color_yellow + f"An error occurred:" + hrcolors.console_color_reset + hrcolors.console_color_bpurple + f"{e}" + hrcolors.console_color_reset)
-                import traceback
-                traceback.print_exc()
-        else:
+         #       print(hrcolors.console_color_yellow + f"An error occurred:" + hrcolors.console_color_reset + hrcolors.console_color_purple + f"{e}" + hrcolors.console_color_reset)
+         #       import traceback
+         #       traceback.print_exc()
+        #else:
             # Print error message if no JSON help data is provided
-            print(hrcolors.console_color_red + f"Error: " + hrcolors.console_color_yellow + " No JSON help data provided in " + hrcolors.console_color_purple + "{homescript}" + hrcolors.console_color_reset + ". Cannot find any help results.")
+            #print(hrcolors.console_color_red + f"Error: " + hrcolors.console_color_yellow + " No JSON help data provided in " + hrcolors.console_color_purple + "{homescript}" + hrcolors.console_color_reset + ". Cannot find any help results.")
 
     @staticmethod
     def encr(e_text, k):
@@ -216,7 +244,7 @@ class hrclass:
     def getclassholder(self):
         return self.externalcmdclass
 
-    def helprequest(helpreq, homescript, class_script_path):
+    def helprequest(self, helpreq, homescript, class_script_path):
         # Check if the help request is "None" and exit
         if helpreq == "None":
             exit()
@@ -242,39 +270,43 @@ class hrclass:
         if helpreq in allcmddefs:
 
             print("\nHelp results for: ", hrcolors.console_color_green + helpreq, hrcolors.console_color_reset)
-            hrclass.getjsonstructure(helpreq)
-            print(hrcolors.console_color_yellow + f"\nUsage" + hrcolors.console_color_purple + f" : {hrclass.genfunctionlist(helpreq, homescript)}\n" + hrcolors.console_color_reset)
+            hrclass.getjsonstructure(self, helpreq)
+            print(hrcolors.console_color_yellow + f"\nUsage" + hrcolors.console_color_purple + f" : {hrclass.genfunctionlist(self, helpreq, homescript)}\n" + hrcolors.console_color_reset)
 
             exit()
         elif helpreq == "list":
 
             print(f"\nListing all Commands -  Type '{homescript} help cmd' without quotes for more deatils.\n"
                   f"                        Only the first line of the descriptiton is shown\n")
-            allcmds = hrclass.gencommandlist(homescript).split(", ")
+            allcmds = hrclass.gencommandlist(self, homescript).split(", ")
             for cmd in allcmds:
-                print(hrcolors.console_color_purple + cmd + hrcolors.console_color_yellow + " - "
-                      + hrcolors.console_color_reset + (hrclass.getjsonlisting(cmd)) + "\n"
-                      + hrcolors.console_color_reset)
+                print(f'{hrcolors.console_color_purple + cmd + hrcolors.console_color_yellow + " - "
+                      + hrcolors.console_color_reset + str(hrclass.getjsonlisting(self, cmd)) + "\n"
+                      + hrcolors.console_color_reset}')
             print(hrcolors.console_color_red + "Done Listing\n" + hrcolors.console_color_reset)
         else:
             print("\n" + hrcolors.console_color_yellow + "No help for this term: " + hrcolors.console_color_red + helpreq, hrcolors.console_color_reset)
 
-    def getjsonlisting(bycmd):
-        temparchdata = hrclass.jsonhelp
-        archivedata = temparchdata[0]
-
-        # Iterate through the help items and print details for the specified command
-        for helpitem in archivedata.get("helpdatastorage", []):
+    def getjsonlisting(self, bycmd: str) -> Optional[str]:
+        temparchdata: Optional[List[Dict[str, Any]]] = hrclass.jsonhelp
+        archivedata: Dict[str, Any] = {}
+        if temparchdata and isinstance(temparchdata, list) and len(temparchdata) > 0:
+            archivedata = temparchdata[0]
+    
+        help_storage: List[Dict[str, Any]] = archivedata.get("helpdatastorage", [])
+        for helpitem in help_storage:
             if helpitem.get('name') == bycmd:
-                 # Iterate through the description items and print each one
-                for descnum in range(len(helpitem) - 2):
-                    cmddesc = helpitem.get(f"desc_{descnum}")
-                    if cmddesc is not None:
-                        return cmddesc
+                         # Iterate through the description items and print each one
+                        for descnum in range(len(helpitem) - 2):
+                            cmddesc = helpitem.get(f"desc_{descnum}")
+                            if cmddesc is not None:
+                                return cmddesc
 
-    def getjsonstructure(bycmd):
-        temparchdata = hrclass.jsonhelp
-        archivedata = temparchdata[0]
+    def getjsonstructure(self, bycmd):
+        temparchdata: Optional[List[Dict[str, Any]]] = hrclass.jsonhelp
+        archivedata: Dict[str, Any] = {}
+        if temparchdata and isinstance(temparchdata, list) and len(temparchdata) > 0:
+            archivedata = temparchdata[0]
 
         # Iterate through the help items and print details for the specified command
         for helpitem in archivedata.get("helpdatastorage", []):
@@ -289,7 +321,9 @@ class hrclass:
                     if cmddesc is not None:
                         print(cmddesc)
 
-    def verify(checkargs, compared, helpreq, homescript):
+    def verify(self, checkargs, compared, helpreq, homescript):
+        _ = helpreq
+        _ = homescript
         global argpass
         arg_types = {"s": str, "i": int, "o": object, "a": any, "": None}
 
@@ -304,18 +338,18 @@ class hrclass:
             if arg_type is None:
                 print(f"\nCannot continue.",hrcolors.console_color_yellow + f"Invalid argument type:", hrcolors.console_color_textblink + hrcolors.console_color_red + f" {arg}.", hrcolors.console_color_reset)
                 argpass = False
-
-            try:
-                # Try to convert the compared value to the specified argument type
-                val = arg_type(compared[x - 2])
-            except ValueError:
-                print(f"\nCannot continue. Argument ({x - 1}) is not a {arg}.")
-                argpass = False
-                return False
+            else:
+                try:
+                    # Try to convert the compared value to the specified argument type
+                    val = arg_type(compared[x - 2])
+                except ValueError:
+                    print(f"\nCannot continue. Argument ({x - 1}) is not a {arg}.")
+                    argpass = False
+                    return False
 
         return True
 
-    def gencommandlist(homescript):
+    def gencommandlist(self, homescript):
         allcmddefs = set()  # Variable to store all command definitions
 
         # Function to traverse the AST and collect command definitions
@@ -334,7 +368,7 @@ class hrclass:
         # Return the list of command definitions
         return ', '.join(sorted(allcmddefs))
 
-    def genfunctionlist(bycmd, homescript):
+    def genfunctionlist(self, bycmd, homescript):
         allcmddefs = {}  # Dictionary to store command definitions and their arguments
 
         # Function to traverse the AST and collect command definitions
@@ -366,21 +400,22 @@ class hrclass:
 
 def dynamically_import(full_script_path, class_name):
     try:
-        remenvpath = os.path.dirname(__file__).split(os.sep)
+        #remenvpath = os.path.dirname(__file__).split(os.sep)
 
         # Create a module specification
-        spec = importlib.util.spec_from_file_location("confirmed", full_script_path)
+        spec = util.spec_from_file_location("confirmed", full_script_path)
+        if spec is not None:
+            # Load the module from the specification
+            script_module = util.module_from_spec(spec)
+            spec.loader.exec_module(script_module)
 
-        # Load the module from the specification
-        script_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(script_module)
+            # Get the class from the module
+            script_class = getattr(script_module, class_name)
 
-        # Get the class from the module
-        script_class = getattr(script_module, class_name)
-
-        # Instantiate the class
-        instance = script_class()
-        return instance
+            # Instantiate the class
+            instance = script_class()
+            return instance
+    
     except ImportError as e:
         print(f"Error importing module '{full_script_path}': {e}")
         return None
@@ -391,8 +426,14 @@ def dynamically_import(full_script_path, class_name):
 def activate_virtualenv():
     # Get the path to the directory containing the current script
     # script_directory = os.path.dirname(os.path.abspath(os.path.join('.venv/Scripts/', 'activate_this.py')))
+    
+    
+    
     bat_directory = os.path.dirname(os.path.abspath(os.path.join('activate.bat')))
+    
     script_directory = os.path.dirname(os.path.abspath(os.path.join('activate_this.py')))
+    
+
     # Determine the platform (Windows, macOS, Linux)
     platform = sys.platform.lower()
     # Define the path to the activate_this.py script based on the platform
@@ -444,7 +485,7 @@ def deactivate_virtualenv():
         exec(open(activate_script_path).read(), {'__file__': activate_script_path})
     print("Virtual environment deactivated!")
 
-def consoleinputlistener(frommainscript):
+async def consoleinputlistener(self, frommainscript):
     # Set the script file in project details
     prj_details.script_file = frommainscript
 
@@ -452,18 +493,20 @@ def consoleinputlistener(frommainscript):
     if prj_details.enable_env == 1:
         # If not in a virtual environment, activate it
         if not is_virtualenv():
-            activate_virtualenv()
+            #activate_virtualenv()
+            pass
 
     else:
         if is_virtualenv():
-            deactivate_virtualenv()
-
+            #deactivate_virtualenv()
+            pass
     # Get command line arguments
     args = sys.argv
     cmd = ""
 
     # Get the script file name and its base name
-    first_arg = frommainscript.split(os.sep)[-1].split('.')[0] + ".py"
+    first_arg = os.path.basename(sys.argv[0])
+    #first_arg = str(frommainscript).split(os.sep)[-1].split('.')[0] + ".py"
     or_fromenv = first_arg.split('.', 1)
     n = len(sys.argv)
 
@@ -488,15 +531,13 @@ def consoleinputlistener(frommainscript):
                       + " - " + hrcolors.console_color_blue + prj_details.grouporg + hrcolors.console_color_reset
                       + "\n\n" + prj_details.scriptdesc)
 
-                print("\nFor a list of commands type " + hrcolors.console_color_purple + "'"
-                      + prj_details.script_file + " help list'" + hrcolors.console_color_reset
-                      + " without the quotes.\n")
+                print(f"\nFor a list of commands type {hrcolors.console_color_purple} '{prj_details.script_file} help list'{hrcolors.console_color_reset} without the quotes.\n")
 
             else:
                 # Get the next argument as the command and call checkcmdcache
                 cmd = sys.argv[x + 1]
                 args = sys.argv
-                hrclass.checkcmdcache(cmd, args, first_arg, classcontainer)
+                await hrclass.checkcmdcache(self, cmd, args, first_arg, classcontainer)
         else:
             # Handle invalid command case
             cmd = sys.argv[x]
@@ -529,19 +570,11 @@ if getattr(sys, 'frozen', False):
 elif __file__:
     application_path = os.path.dirname(__file__)
 
-def main():
-    if prj_details.enable_env == 1:
-        # If not in a virtual environment, activate it
-        if not is_virtualenv():
-            activate_virtualenv()
-
-    else:
-        if is_virtualenv():
-            deactivate_virtualenv()
-
-    isfile_arg = os.path.basename(__file__)
+async def main():
+    # Get the actual script name being executed (not __file__)
+    isfile_arg = os.path.basename(sys.argv[0])  # Changed from __file__ to sys.argv[0]
     fromhome = os.path.basename(hrclass.externalclasspath)
-    consoleinputlistener(isfile_arg, fromhome)
+    await consoleinputlistener(isfile_arg, fromhome)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
